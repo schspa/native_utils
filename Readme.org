@@ -1,0 +1,52 @@
+# -*- coding:utf-8 -*-
+#+LANGUAGE:  zh
+#+TITLE:     Readme.org
+#+AUTHOR:    
+#+EMAIL:     schspa@Arch-Schspa
+#+DATE:     2019-05-07 Tue
+#+DESCRIPTION:Readme.org
+#+KEYWORDS: 
+#+TAGS:
+#+FILETAGS: 
+#+OPTIONS:   H:2 num:nil toc:t \n:t @:t ::t |:t ^:nil -:t f:t *:t <:t
+#+OPTIONS:   TeX:t LaTeX:t skip:nil d:nil todo:t pri:nil 
+#+LATEX_HEADER: \usepackage{fontspec}
+#+LATEX_HEADER: \setmainfont{PingFang SC}
+
+* Arm library inject sample
+** orignal code from https://www.cnblogs.com/goodhacker/p/9296901.html
+** optomize :
++ remove depends on library name, we can find it from maps
++ add inject cli interface
+
+* Build
+#+BEGIN_SRC bash
+ndk-build NDK_APPLICATION_MK=Application.mk NDK_PROJECT_PATH=./
+#+END_SRC
+
+* Run
+#+BEGIN_SRC bash
+# /data/local/tmp/armeabi-v7a/inject -n "/vendor/bin/hw/android.hardware.camera.provider@2.4-service" --library "/vendor/lib/libentry.so" -e "hook_entry" -a "message from shell command"     
+[+] Injecting process: 6232
+[+]Calling mmap in target process.
+[+] Target process returned from mmap, return value = e9923000, pc = 0 
+library path = /vendor/lib/libentry.so
+[+]Calling dlopen in target process.
+[+] Target process returned from dlopen, return value = ec39d3ff, pc = 0 
+[+]Calling dlsym in target process.
+[+] Target process returned from dlsym, return value = d480bde9, pc = 0 
+hooke_entry_addr = 0xd480bde9
+[+]Calling hook_entry in target process.
+[+] Target process returned from hook_entry, return value = 0, pc = 0 
+Press enter to dlclose and detach.
+
+[+]Calling dlclose in target process.
+[+] Target process returned from dlclose, return value = 0, pc = 0 
+
+#+END_SRC
+
+#+BEGIN_SRC txt
+05-07 17:32:37.410  7028  7028 E INJECT_DEBUG: hook_constructor
+05-07 17:32:37.416  7028  7028 E INJECT_DEBUG: Hook success, pid = 7028
+05-07 17:32:37.416  7028  7028 E INJECT_DEBUG: Hello message from shell command
+#+END_SRC
