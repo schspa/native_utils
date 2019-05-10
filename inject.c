@@ -183,11 +183,19 @@ int ptrace_continue(pid_t pid){
 *
 *   返回值: 失败返回-1
 *--------------------------------------------------*/
-int ptrace_attach(pid_t pid){
-    if(ptrace(PTRACE_ATTACH, pid, NULL, 0) < 0){
+int ptrace_attach (pid_t pid)
+{
+	if (ptrace(PTRACE_ATTACH, pid, 0, 0) < 0) {
         perror("ptrace_attach");
         return -1;
     }
+
+    int status = 0;
+	int res = 0;
+    res = waitpid(pid, &status , WUNTRACED);
+	if (res != pid)
+		perror("waitpid");
+
     return 0;
 }
 
@@ -423,15 +431,16 @@ int inject_remote_process(pid_t target_pid, const char* library_path, const char
     }
 
     //②GETREGS，获取目标进程的寄存器，保存现场
-    if(ptrace_getregs(target_pid, &regs) == -1)
-        goto exit;
+    if(ptrace_getregs(target_pid, &regs) == -1) {
+        goto detach;
+	}
 
     //保存原始寄存器
     memcpy(&original_regs, &regs, sizeof(regs));
 
     parameters[0] = 0;　　// automic alloc memory
     parameters[1] = 0x4000;　　//size
-    parameters[2] = PROT_READ | PROT_WRITE |PROT_EXEC;　　// perm
+    parameters[2] = PROT_READ | PROT_WRITE;　　// perm
     parameters[3] = MAP_ANONYMOUS | MAP_PRIVATE;　　// anon
     parameters[4] = 0;
     parameters[5] = 0;
@@ -456,6 +465,24 @@ int inject_remote_process(pid_t target_pid, const char* library_path, const char
     }
     //(3)取得dlopen的返回值，存放在sohandle变量中
     void* sohandle = ptrace_retval(&regs);
+
+	if (!sohandle) {
+	    void *address;
+		int len;
+		if(ptrace_remote_call(target_pid, dlerror,  parameters, 0, &regs) == -1){
+			goto exit;
+		}
+		address = ptrace_retval(&regs);
+		parameters[0] = address;
+		ptrace_remote_call(target_pid, strlen, parameters, 1, &regs);
+		len = ptrace_retval(&regs) + 1;
+		printf("dlopen failed: dlerror return: %p len: %d\n", address, len);
+		char errorbuf[1024];
+		ptrace_readdata(target_pid, address, errorbuf,
+						len > sizeof(errorbuf)? sizeof(errorbuf) : len);
+		printf("error msg: %s\n", errorbuf);
+		goto exit;
+	}
 
 	if (function_name) {
 		//⑧调用dlsym函数
@@ -487,14 +514,15 @@ int inject_remote_process(pid_t target_pid, const char* library_path, const char
 
     parameters[0] = (long) sohandle;
 
-    if(ptrace_remote_call(target_pid, dlclose, parameters, 1, &regs) == -1)
-        goto exit;
+	// we don't call dlclose, because we need it to run
+    //if(ptrace_remote_call(target_pid, dlclose, parameters, 1, &regs) == -1)
+    //    goto exit;
 
+    ret = 0;
+exit:
     //⑪恢复现场并退出ptrace
     ptrace_setregs(target_pid, &original_regs);
+detach:
     ptrace_detach(target_pid);
-    ret = 0;
-
-exit:
     return ret;
 }
